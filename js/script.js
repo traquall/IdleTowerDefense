@@ -1,16 +1,22 @@
 $(document).ready(function(){
 
+  var gold = 10;
   var tailleCase = 50; // taille en px
   var speed = 100; // intervalle de rafraichissement de l'image
   var canvas = $("#canvas")[0];
   var ctx = canvas.getContext('2d');
-  var map = new Array(); // 0:vide 1:mur 2:tourelle 3:ennemi
+  var map = new Array(); // 0:vide 1:mur 2:tourelle
   var tower = document.getElementById("tower");
   var monster = document.getElementById("monster");
+  var bullet = document.getElementById("bullet");
   var towers = new Array();
   var path = new Array();
   var enemys = new Array();
+  var bullets = new Array();
   var spawnSpeed = 5000; // intervalle entre les spawns d'ennemis
+  var shootSpeed = 60;
+  var bulletSpeed = 1/10;
+  var radius = 3;
 
   function init(){
     //path of enemys
@@ -29,15 +35,38 @@ $(document).ready(function(){
   function animate(){
     moveEnemys();
     paint();
+    document.getElementById("gold").innerHTML = "gold : "+gold;
 
-    //createTower();
+
+    for (var i = 0; i < towers.length; i++) {
+      towers[i].nextShot --;
+      if(towers[i].nextShot <= 0 && towers[i].aiming == true){
+        shoot(towers[i]);
+        towers[i].nextShot = shootSpeed;
+      }
+    }
   }
 
   function createTower(X,Y){
     for (var i = 0; i < towers.length; i++) {
-      if(towers[i].x == X && towers[i].y == Y)
-      var mytower = towers[i];
+      if(towers[i].x == X && towers[i].y == Y){
+        var mytower = towers[i];
+        mytower.aiming = false;
+      }
     }
+
+    var closestE = {x:1000, y:1000};
+
+    for (var i = 0; i < enemys.length; i++) {
+      if(Math.sqrt(Math.pow(enemys[i].x - X, 2)+Math.pow(enemys[i].y - Y, 2)) < Math.sqrt(Math.pow(closestE.x - X, 2)+Math.pow(closestE.y - Y, 2)))
+        closestE = enemys[i];
+    }
+
+    if(Math.sqrt(Math.pow(closestE.x - X, 2)+Math.pow(closestE.y - Y, 2)) <= radius){
+      rotateTower(mytower, closestE);
+      mytower.aiming = true;
+    }
+
     ctx.beginPath();
     ctx.fillStyle="brown";
     ctx.rect(X*tailleCase, Y*tailleCase, tailleCase, tailleCase);
@@ -48,6 +77,30 @@ $(document).ready(function(){
     ctx.rotate(mytower.angle+(Math.PI/2)); // +90degré pour ajuster l'image
     ctx.drawImage(tower,-tailleCase/2,-tailleCase/2, tailleCase, tailleCase);
     ctx.restore();
+  }
+
+  function shoot(mytower){
+
+    if(mytower.aiming == true)
+      bullets.push({x: mytower.x, y:mytower.y, angle:mytower.angle});
+
+  }
+
+  function rotateTower(myTower, myEnemy){
+      //var diffX = parseInt(e.pageX)-parseInt($("#canvas").offset().left);
+      //var diffY = parseInt(e.pageY)-parseInt($("#canvas").offset().top);
+
+      var adj =(myEnemy.x+0.5)-(myTower.x+0.5);
+      var opp = (myEnemy.y+0.5)-(myTower.y+0.5);
+
+      var hyp = Math.sqrt(Math.pow(adj,2)+Math.pow(opp,2));
+      var cosi_a = Math.abs(adj/hyp);
+      var angl =  Math.acos(cosi_a);
+
+      if (adj<0 && opp<0){myTower.angle= angl + Math.PI;}
+      if (adj>0 && opp<0){myTower.angle= -angl;}
+      if (adj<0 && opp>0){myTower.angle= -(angl + Math.PI);}
+      if (adj>=0 && opp>=0){myTower.angle= angl;}
   }
 
   function moveEnemys(){
@@ -150,36 +203,47 @@ $(document).ready(function(){
         else if(map[i][j] == 2){
           createTower(i,j);
         }
-        // ennemi
-        else if(map[i][j] == 3){
-          //TODO
-        }
       }
     }
 
     for (var i = 0; i < enemys.length; i++) {
       ctx.drawImage(monster,enemys[i].x*tailleCase,enemys[i].y*tailleCase, tailleCase, tailleCase);
     }
-  }
 
-  $("#canvas").mousemove(function(e){
-    for (var i = 0; i < towers.length; i++) {
-      var diffX = parseInt(e.pageX)-parseInt($("#canvas").offset().left);
-      var diffY = parseInt(e.pageY)-parseInt($("#canvas").offset().top);
+    for (var i = 0; i < bullets.length; i++) {
 
-      var adj = diffX-(towers[i].x*tailleCase + tailleCase/2);
-       var opp = diffY-(towers[i].y*tailleCase + tailleCase/2);
+      dirX = Math.cos(bullets[i].angle);
+      dirY = Math.sin(bullets[i].angle);
+      console.log('x : '+dirX);
+      console.log('y : '+dirY);
 
-       var hyp = Math.sqrt(Math.pow(adj,2)+Math.pow(opp,2));
-       var cosi_a = Math.abs(adj/hyp);
-       var angl =  Math.acos(cosi_a);
+      ctx.drawImage(bullet,bullets[i].x*tailleCase+tailleCase/2,bullets[i].y*tailleCase+tailleCase/2, 10, 10);
+      bullets[i].x += dirX;
+      bullets[i].y += dirY;
 
-       if (adj<0 && opp<0){towers[i].angle= angl + Math.PI;}
-       if (adj>0 && opp<0){towers[i].angle= -angl;}
-       if (adj<0 && opp>0){towers[i].angle= -(angl + Math.PI);}
-       if (adj>=0 && opp>=0){towers[i].angle= angl;}
+      for (var j = 0; j < enemys.length; j++) {
+        if(bullets[i]){
+          var b = bullets[i];
+          var e = enemys[j];
+
+          if(b.x*tailleCase + 10 >= e.x*tailleCase && b.x*tailleCase <= e.x*tailleCase + tailleCase && b.y*tailleCase + 10 >= e.y*tailleCase && b.y*tailleCase <= e.y*tailleCase + tailleCase){
+            bullets.splice(i,1);
+            enemys.splice(j,1);
+            gold ++;
+          }
+        }
+      }
+
+
+
+      if(bullets[i].x < 0 || bullets[i].x > 10 || bullets[i].y < 0 || bullets[i].y > 10){
+        bullets.splice(i, 1);
+        console.log('destroy bullet');
+      }
     }
-  });
+
+
+  }
 
   $("#canvas").click(function(e){
     var diffX = parseInt(e.pageX)-parseInt($("#canvas").offset().left);
@@ -188,8 +252,14 @@ $(document).ready(function(){
     var j = Math.floor(diffY/tailleCase);
 
     if(map[i][j] == 1){
-      towers.push({x:i , y:j , angle:0});
-      map[i][j] = 2;
+      if(gold >= 10){
+        towers.push({x:i , y:j , angle:0, aiming: false, nextShot: shootSpeed});
+        gold -= 10;
+        map[i][j] = 2;
+      }
+      else{
+
+      }
     }
   });
 
